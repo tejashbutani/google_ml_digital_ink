@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'dart:ui' as ui;
 import 'package:google_mlkit_digital_ink_recognition/google_mlkit_digital_ink_recognition.dart' as ml_kit;
+import 'dart:async';
 
 void main() {
   runApp(const MyApp());
@@ -36,6 +37,8 @@ class _DrawingPageState extends State<DrawingPage> {
   bool isTextMode = false;
   late ml_kit.DigitalInkRecognizer _digitalInkRecognizer;
   late ml_kit.DigitalInkRecognizerModelManager _modelManager;
+  Timer? _recognitionTimer;
+  static const int recognitionDelay = 1000; // 1 second delay
 
   @override
   void initState() {
@@ -57,6 +60,7 @@ class _DrawingPageState extends State<DrawingPage> {
   @override
   void dispose() {
     _digitalInkRecognizer.close();
+    _recognitionTimer?.cancel();
     super.dispose();
   }
 
@@ -65,6 +69,8 @@ class _DrawingPageState extends State<DrawingPage> {
       isDrawing = true;
       points = [details.localPosition];
       strokes.add(points);
+      // Cancel any pending recognition
+      _recognitionTimer?.cancel();
     });
   }
 
@@ -76,31 +82,40 @@ class _DrawingPageState extends State<DrawingPage> {
     }
   }
 
-  Future<void> _onPanEnd(DragEndDetails details) async {
+  void _onPanEnd(DragEndDetails details) {
     setState(() {
       isDrawing = false;
     });
 
     if (isTextMode) {
-      await _recognizeText();
+      // Cancel any existing timer
+      _recognitionTimer?.cancel();
+      // Start a new timer
+      _recognitionTimer = Timer(const Duration(milliseconds: recognitionDelay), () {
+        _recognizeText();
+      });
     }
   }
 
   Future<void> _recognizeText() async {
     try {
       final ink = ml_kit.Ink();
-      final stroke = ml_kit.Stroke();
+      final List<ml_kit.Stroke> mlStrokes = [];
 
-      // Convert our points to StrokePoints
-      stroke.points = points
-          .map((point) => ml_kit.StrokePoint(
-                x: point.dx,
-                y: point.dy,
-                t: DateTime.now().millisecondsSinceEpoch,
-              ))
-          .toList();
+      // Convert all strokes to ML Kit format
+      for (var stroke in strokes) {
+        final mlStroke = ml_kit.Stroke();
+        mlStroke.points = stroke
+            .map((point) => ml_kit.StrokePoint(
+                  x: point.dx,
+                  y: point.dy,
+                  t: DateTime.now().millisecondsSinceEpoch,
+                ))
+            .toList();
+        mlStrokes.add(mlStroke);
+      }
 
-      ink.strokes = [stroke];
+      ink.strokes = mlStrokes;
 
       final candidates = await _digitalInkRecognizer.recognize(ink);
 
@@ -125,12 +140,16 @@ class _DrawingPageState extends State<DrawingPage> {
     setState(() {
       strokes.clear();
       points = [];
+      // Cancel any pending recognition
+      _recognitionTimer?.cancel();
     });
   }
 
   void _togglePenMode(bool t) {
     setState(() {
       isTextMode = t;
+      // Cancel any pending recognition when switching modes
+      _recognitionTimer?.cancel();
     });
   }
 
@@ -138,7 +157,7 @@ class _DrawingPageState extends State<DrawingPage> {
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        title: const Text('Drawing Canvas'),
+        title: const Text('Google ML Digital Ink Recognition'),
       ),
       body: GestureDetector(
         onPanStart: _onPanStart,
