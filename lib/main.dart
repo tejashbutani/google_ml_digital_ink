@@ -207,8 +207,8 @@ class _DrawingPageState extends State<DrawingPage> {
               top: textPosition!.dy,
               child: Text(
                 recognizedText!,
-                style: TextStyle(
-                  fontSize: textFontSize ?? 24,
+                style: const TextStyle(
+                  fontSize: 100,
                   fontWeight: FontWeight.bold,
                   color: Colors.blue,
                 ),
