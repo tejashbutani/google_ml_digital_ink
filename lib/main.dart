@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'dart:ui' as ui;
 import 'package:google_mlkit_digital_ink_recognition/google_mlkit_digital_ink_recognition.dart' as ml_kit;
 import 'dart:async';
+import 'dart:math' as math;
 
 void main() {
   runApp(const MyApp());
@@ -38,7 +39,10 @@ class _DrawingPageState extends State<DrawingPage> {
   late ml_kit.DigitalInkRecognizer _digitalInkRecognizer;
   late ml_kit.DigitalInkRecognizerModelManager _modelManager;
   Timer? _recognitionTimer;
-  static const int recognitionDelay = 200; // 1 second delay
+  static const int recognitionDelay = 300; // 1 second delay
+  String? recognizedText;
+  Offset? textPosition;
+  double? textFontSize;
 
   @override
   void initState() {
@@ -71,6 +75,10 @@ class _DrawingPageState extends State<DrawingPage> {
       strokes.add(points);
       // Cancel any pending recognition
       _recognitionTimer?.cancel();
+      // Clear previous recognized text
+      recognizedText = null;
+      textPosition = null;
+      textFontSize = null;
     });
   }
 
@@ -88,6 +96,22 @@ class _DrawingPageState extends State<DrawingPage> {
     });
 
     if (isTextMode) {
+      // Calculate the average position and height of all points for text placement
+      if (points.isNotEmpty) {
+        double avgX = points.map((p) => p.dx).reduce((a, b) => a + b) / points.length;
+        double avgY = points.map((p) => p.dy).reduce((a, b) => a + b) / points.length;
+        textPosition = Offset(avgX, avgY);
+
+        // Calculate the height of the stroke
+        double minY = points.map((p) => p.dy).reduce(math.min);
+        double maxY = points.map((p) => p.dy).reduce(math.max);
+        double strokeHeight = maxY - minY;
+
+        // Set font size proportional to stroke height
+        // Using a multiplier to make the text slightly larger than the stroke
+        textFontSize = strokeHeight * 1.5;
+      }
+
       // Cancel any existing timer
       _recognitionTimer?.cancel();
       // Start a new timer
@@ -120,12 +144,12 @@ class _DrawingPageState extends State<DrawingPage> {
       final candidates = await _digitalInkRecognizer.recognize(ink);
 
       if (candidates.isNotEmpty) {
-        final recognizedText = candidates.first.text;
-        if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(content: Text('Recognized: $recognizedText')),
-          );
-        }
+        setState(() {
+          recognizedText = candidates.first.text;
+          // Clear the strokes after recognition
+          strokes.clear();
+          points = [];
+        });
       }
     } catch (e) {
       if (mounted) {
@@ -140,6 +164,9 @@ class _DrawingPageState extends State<DrawingPage> {
     setState(() {
       strokes.clear();
       points = [];
+      recognizedText = null;
+      textPosition = null;
+      textFontSize = null;
       // Cancel any pending recognition
       _recognitionTimer?.cancel();
     });
@@ -150,6 +177,9 @@ class _DrawingPageState extends State<DrawingPage> {
       isTextMode = t;
       // Cancel any pending recognition when switching modes
       _recognitionTimer?.cancel();
+      recognizedText = null;
+      textPosition = null;
+      textFontSize = null;
     });
     _clearCanvas();
   }
@@ -160,14 +190,31 @@ class _DrawingPageState extends State<DrawingPage> {
       appBar: AppBar(
         title: const Text('Google ML Digital Ink Recognition'),
       ),
-      body: GestureDetector(
-        onPanStart: _onPanStart,
-        onPanUpdate: _onPanUpdate,
-        onPanEnd: _onPanEnd,
-        child: CustomPaint(
-          painter: DrawingPainter(strokes, isTextMode),
-          size: Size.infinite,
-        ),
+      body: Stack(
+        children: [
+          GestureDetector(
+            onPanStart: _onPanStart,
+            onPanUpdate: _onPanUpdate,
+            onPanEnd: _onPanEnd,
+            child: CustomPaint(
+              painter: DrawingPainter(strokes, isTextMode),
+              size: Size.infinite,
+            ),
+          ),
+          if (recognizedText != null && textPosition != null)
+            Positioned(
+              left: textPosition!.dx,
+              top: textPosition!.dy,
+              child: Text(
+                recognizedText!,
+                style: TextStyle(
+                  fontSize: textFontSize ?? 24,
+                  fontWeight: FontWeight.bold,
+                  color: Colors.blue,
+                ),
+              ),
+            ),
+        ],
       ),
       floatingActionButton: Row(
         mainAxisAlignment: MainAxisAlignment.end,
