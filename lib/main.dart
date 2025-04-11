@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'dart:ui' as ui;
+import 'package:google_mlkit_digital_ink_recognition/google_mlkit_digital_ink_recognition.dart' as ml_kit;
 
 void main() {
   runApp(const MyApp());
@@ -32,6 +33,32 @@ class _DrawingPageState extends State<DrawingPage> {
   List<Offset> points = [];
   bool isDrawing = false;
   List<List<Offset>> strokes = [];
+  bool isTextMode = false;
+  late ml_kit.DigitalInkRecognizer _digitalInkRecognizer;
+  late ml_kit.DigitalInkRecognizerModelManager _modelManager;
+
+  @override
+  void initState() {
+    super.initState();
+    _initDigitalInkRecognizer();
+  }
+
+  Future<void> _initDigitalInkRecognizer() async {
+    _digitalInkRecognizer = ml_kit.DigitalInkRecognizer(languageCode: 'en');
+    _modelManager = ml_kit.DigitalInkRecognizerModelManager();
+
+    // Download the model if not already downloaded
+    final bool isDownloaded = await _modelManager.isModelDownloaded('en');
+    if (!isDownloaded) {
+      await _modelManager.downloadModel('en');
+    }
+  }
+
+  @override
+  void dispose() {
+    _digitalInkRecognizer.close();
+    super.dispose();
+  }
 
   void _onPanStart(DragStartDetails details) {
     setState(() {
@@ -49,16 +76,61 @@ class _DrawingPageState extends State<DrawingPage> {
     }
   }
 
-  void _onPanEnd(DragEndDetails details) {
+  Future<void> _onPanEnd(DragEndDetails details) async {
     setState(() {
       isDrawing = false;
     });
+
+    if (isTextMode) {
+      await _recognizeText();
+    }
+  }
+
+  Future<void> _recognizeText() async {
+    try {
+      final ink = ml_kit.Ink();
+      final stroke = ml_kit.Stroke();
+
+      // Convert our points to StrokePoints
+      stroke.points = points
+          .map((point) => ml_kit.StrokePoint(
+                x: point.dx,
+                y: point.dy,
+                t: DateTime.now().millisecondsSinceEpoch,
+              ))
+          .toList();
+
+      ink.strokes = [stroke];
+
+      final candidates = await _digitalInkRecognizer.recognize(ink);
+
+      if (candidates.isNotEmpty) {
+        final recognizedText = candidates.first.text;
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(content: Text('Recognized: $recognizedText')),
+          );
+        }
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Error: $e')),
+        );
+      }
+    }
   }
 
   void _clearCanvas() {
     setState(() {
       strokes.clear();
       points = [];
+    });
+  }
+
+  void _togglePenMode() {
+    setState(() {
+      isTextMode = !isTextMode;
     });
   }
 
@@ -73,14 +145,25 @@ class _DrawingPageState extends State<DrawingPage> {
         onPanUpdate: _onPanUpdate,
         onPanEnd: _onPanEnd,
         child: CustomPaint(
-          painter: DrawingPainter(strokes),
+          painter: DrawingPainter(strokes, isTextMode),
           size: Size.infinite,
         ),
       ),
-      floatingActionButton: FloatingActionButton(
-        onPressed: _clearCanvas,
-        tooltip: 'Clear Canvas',
-        child: const Icon(Icons.delete_forever),
+      floatingActionButton: Row(
+        mainAxisAlignment: MainAxisAlignment.end,
+        children: [
+          FloatingActionButton(
+            onPressed: _togglePenMode,
+            tooltip: isTextMode ? 'Switch to Drawing' : 'Switch to Text',
+            child: Icon(isTextMode ? Icons.edit : Icons.abc),
+          ),
+          const SizedBox(width: 16),
+          FloatingActionButton(
+            onPressed: _clearCanvas,
+            tooltip: 'Clear Canvas',
+            child: const Icon(Icons.delete_forever),
+          ),
+        ],
       ),
     );
   }
@@ -88,13 +171,14 @@ class _DrawingPageState extends State<DrawingPage> {
 
 class DrawingPainter extends CustomPainter {
   final List<List<Offset>> strokes;
+  final bool isTextMode;
 
-  DrawingPainter(this.strokes);
+  DrawingPainter(this.strokes, this.isTextMode);
 
   @override
   void paint(Canvas canvas, Size size) {
     final paint = Paint()
-      ..color = Colors.black
+      ..color = isTextMode ? Colors.blue : Colors.black
       ..strokeWidth = 4.0
       ..strokeCap = StrokeCap.round;
 
