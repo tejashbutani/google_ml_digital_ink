@@ -128,9 +128,9 @@ class _DrawingPageState extends State<DrawingPage> {
     });
   }
 
-  void _togglePenMode() {
+  void _togglePenMode(bool t) {
     setState(() {
-      isTextMode = !isTextMode;
+      isTextMode = t;
     });
   }
 
@@ -153,15 +153,24 @@ class _DrawingPageState extends State<DrawingPage> {
         mainAxisAlignment: MainAxisAlignment.end,
         children: [
           FloatingActionButton(
-            onPressed: _togglePenMode,
-            tooltip: isTextMode ? 'Switch to Drawing' : 'Switch to Text',
-            child: Icon(isTextMode ? Icons.edit : Icons.abc),
+            onPressed: () => _togglePenMode(true),
+            tooltip: 'Text Mode',
+            backgroundColor: isTextMode ? Colors.blue : Colors.black87,
+            child: const Icon(Icons.abc, color: Colors.white),
+          ),
+          const SizedBox(width: 16),
+          FloatingActionButton(
+            onPressed: () => _togglePenMode(false),
+            tooltip: 'Normal Mode',
+            backgroundColor: isTextMode ? Colors.black87 : Colors.blue,
+            child: const Icon(Icons.edit, color: Colors.white),
           ),
           const SizedBox(width: 16),
           FloatingActionButton(
             onPressed: _clearCanvas,
             tooltip: 'Clear Canvas',
-            child: const Icon(Icons.delete_forever),
+            backgroundColor: Colors.black87,
+            child: const Icon(Icons.delete_forever, color: Colors.white),
           ),
         ],
       ),
