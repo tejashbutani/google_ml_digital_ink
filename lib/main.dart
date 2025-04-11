@@ -38,7 +38,7 @@ class _DrawingPageState extends State<DrawingPage> {
   late ml_kit.DigitalInkRecognizer _digitalInkRecognizer;
   late ml_kit.DigitalInkRecognizerModelManager _modelManager;
   Timer? _recognitionTimer;
-  static const int recognitionDelay = 1000; // 1 second delay
+  static const int recognitionDelay = 200; // 1 second delay
 
   @override
   void initState() {
@@ -151,6 +151,7 @@ class _DrawingPageState extends State<DrawingPage> {
       // Cancel any pending recognition when switching modes
       _recognitionTimer?.cancel();
     });
+    _clearCanvas();
   }
 
   @override
